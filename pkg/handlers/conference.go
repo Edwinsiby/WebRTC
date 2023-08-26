@@ -15,6 +15,11 @@ var signalingMsg struct {
 	Type string `json:"type"`
 	Data string `json:"data"`
 }
+var StoredOffer string
+
+func GetStoredOffer() string {
+	return StoredOffer
+}
 
 type WebRTCHandler struct{}
 
@@ -89,76 +94,36 @@ func (h *WebRTCHandler) handleWebSocket(c *gin.Context) {
 		}
 	}
 
-	// You can send signaling messages back to clients using conn.WriteMessage
 }
-
-func handleOffer(conn *websocket.Conn, offerSDP string, peerConnection *webrtc.PeerConnection) error {
-
-	// Parse the received offer SDP
-	offer := webrtc.SessionDescription{
+func handleOffer(conn *websocket.Conn, offerSDPstring string, peerConnection *webrtc.PeerConnection) error {
+	offerSDP := webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
-		SDP:  offerSDP,
+		SDP:  offerSDPstring,
 	}
 
-	// Set the offer as the remote description
-	err := peerConnection.SetRemoteDescription(offer)
+	StoredOffer = offerSDPstring
+
+	err := peerConnection.SetRemoteDescription(offerSDP)
 	if err != nil {
 		return errors.Join(errors.New("setRemote"), err)
 	}
 
-	// Create audio and video tracks from user media
-	audioTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "pion")
-	if err != nil {
-		return errors.Join(errors.New("setTrackA"), err)
-	}
-
-	videoTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video", "pion")
-	if err != nil {
-		return errors.Join(errors.New("setTrackV"), err)
-	}
-
-	// Add tracks to the peer connection
-	_, err = peerConnection.AddTrack(audioTrack)
-	if err != nil {
-		return errors.Join(errors.New("AddtrackA"), err)
-	}
-
-	_, err = peerConnection.AddTrack(videoTrack)
-	if err != nil {
-		return errors.Join(errors.New("AddtrackV"), err)
-	}
-
-	// Create an answer SDP
-	answerSDP, err := peerConnection.CreateAnswer(nil)
-	if err != nil {
-		return errors.Join(errors.New("CreateAnswer"), err)
-	}
-
-	// Set the answer as the local description
-	err = peerConnection.SetLocalDescription(answerSDP)
-	if err != nil {
-		return errors.Join(errors.New("setAnswer"), err)
-	}
-
-	// Convert the answer SDP to JSON
-	answerSDPBytes, err := json.Marshal(answerSDP)
+	offerSDPBytes, err := json.Marshal(offerSDP)
 	if err != nil {
 		return errors.Join(errors.New("json"), err)
 	}
 
-	// Send the answer SDP back to the client
-	return conn.WriteMessage(websocket.TextMessage, answerSDPBytes)
+	return conn.WriteMessage(websocket.TextMessage, offerSDPBytes)
 }
 
 func handleAnswer(conn *websocket.Conn, answerSDP string, peerConnection *webrtc.PeerConnection) error {
 
-	answer := webrtc.SessionDescription{}
-	err := json.Unmarshal([]byte(answerSDP), &answer)
-	if err != nil {
-		return errors.Join(errors.New("json"), err)
+	answer := webrtc.SessionDescription{
+		Type: webrtc.SDPTypeAnswer,
+		SDP:  answerSDP,
 	}
 
-	err = peerConnection.SetRemoteDescription(answer)
+	err := peerConnection.SetRemoteDescription(answer)
 	if err != nil {
 		return errors.Join(errors.New("SetRemoteDsc"), err)
 	}
