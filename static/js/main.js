@@ -14,18 +14,20 @@ window.addEventListener('DOMContentLoaded', () => {
     ws.addEventListener('message', event => {
         const message = JSON.parse(event.data);
         handleSignalingData(message);
+        console.log("event.data",message)
     });
+  
 
     function handleSignalingData(data) {
         switch (data.type) {
             case 'offer':
-                handleOffer(data.offer);
+                handleOffer(data);
                 break;
             case 'answer':
-                handleAnswer(data.answer);
+                handleAnswer(data);
                 break;
             case 'candidate':
-                handleICECandidate(data.candidate);
+                handleICECandidate(data);
                 break;
         }
     }
@@ -45,9 +47,10 @@ window.addEventListener('DOMContentLoaded', () => {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(new RTCSessionDescription(answer));
-
+        console.log("answer",answer.sdp)
         // Send answer back to remote peer
-        ws.send(JSON.stringify({ type: 'answer', answer: answer }));
+        ws.send(JSON.stringify({ type: 'answer', data: answer }));
+
     }
 
     // Handle answer received from remote peer
@@ -70,19 +73,20 @@ window.addEventListener('DOMContentLoaded', () => {
 
         peerConnection.onicecandidate = event => {
             if (event.candidate) {
-                ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+                ws.send(JSON.stringify({ type: 'candidate', data: event.candidate.candidate}));
             }
         };
 
         peerConnection.ontrack = event => {
+            console.log("Received remote track:", event.track);
             remoteVideo.srcObject = event.streams[0];
         };
 
         // Create offer to initiate the connection
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(new RTCSessionDescription(offer));
-
-        ws.send(JSON.stringify({ type: 'offer', offer: offer }));
+        console.log("offer",offer)
+        ws.send(JSON.stringify({ type: 'offer', data: offer.sdp }));
     }
 
     init();

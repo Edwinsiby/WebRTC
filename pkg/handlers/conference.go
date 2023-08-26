@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -9,6 +10,11 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v3"
 )
+
+var signalingMsg struct {
+	Type string `json:"type"`
+	Data string `json:"data"`
+}
 
 type WebRTCHandler struct{}
 
@@ -34,46 +40,48 @@ func (h *WebRTCHandler) handleWebSocket(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		// Handle error
-		fmt.Println("error", err)
+		fmt.Println("error upgrade", err)
 		return
 	}
 	defer conn.Close()
 
-	// Handle WebRTC signaling messages
+	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		return
+	}
+
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			fmt.Println("error", err)
+			fmt.Println("error readmsg", err)
 			break
 		}
 
-		// Parse the incoming JSON message
-		var signalingMsg struct {
-			Type string `json:"type"`
-			Data string `json:"data"`
-		}
 		if err := json.Unmarshal(message, &signalingMsg); err != nil {
-			fmt.Println("error", err)
+			fmt.Println("error json:", err)
 			continue
 		}
 
 		switch signalingMsg.Type {
 		case "offer":
-			err := handleOffer(conn, signalingMsg.Data)
+			fmt.Println("case offer")
+			err := handleOffer(conn, signalingMsg.Data, peerConnection)
 			if err != nil {
-				fmt.Println("error", err)
+				fmt.Println("error case1", err.Error())
 				break
 			}
 		case "answer":
-			err := handleAnswer(conn, signalingMsg.Data)
+			fmt.Println("case answer")
+			err := handleAnswer(conn, signalingMsg.Data, peerConnection)
 			if err != nil {
-				fmt.Println("error", err)
+				fmt.Println("error case2", err)
 				break
 			}
 		case "candidate":
-			err := handleICECandidate(conn, signalingMsg.Data)
+			fmt.Println("case candidate")
+			err := handleICECandidate(conn, signalingMsg.Data, peerConnection)
 			if err != nil {
-				fmt.Println("error", err)
+				fmt.Println("error case3", err)
 				break
 			}
 		default:
@@ -84,123 +92,90 @@ func (h *WebRTCHandler) handleWebSocket(c *gin.Context) {
 	// You can send signaling messages back to clients using conn.WriteMessage
 }
 
-func handleOffer(conn *websocket.Conn, offerSDP string) error {
-	// Create a new PeerConnection instance
-	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
-	if err != nil {
-		return err
-	}
-	defer peerConnection.Close()
+func handleOffer(conn *websocket.Conn, offerSDP string, peerConnection *webrtc.PeerConnection) error {
 
 	// Parse the received offer SDP
-	offer := webrtc.SessionDescription{}
-	err = json.Unmarshal([]byte(offerSDP), &offer)
-	if err != nil {
-		return err
+	offer := webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  offerSDP,
 	}
 
 	// Set the offer as the remote description
-	err = peerConnection.SetRemoteDescription(offer)
+	err := peerConnection.SetRemoteDescription(offer)
 	if err != nil {
-		return err
-	}
-
-	// Create an answer SDP
-	answer, err := peerConnection.CreateAnswer(nil)
-	if err != nil {
-		return err
-	}
-
-	// Set the answer as the local description
-	err = peerConnection.SetLocalDescription(answer)
-	if err != nil {
-		return err
+		return errors.Join(errors.New("setRemote"), err)
 	}
 
 	// Create audio and video tracks from user media
 	audioTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "pion")
 	if err != nil {
-		return err
+		return errors.Join(errors.New("setTrackA"), err)
 	}
 
 	videoTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video", "pion")
 	if err != nil {
-		return err
+		return errors.Join(errors.New("setTrackV"), err)
 	}
 
 	// Add tracks to the peer connection
 	_, err = peerConnection.AddTrack(audioTrack)
 	if err != nil {
-		return err
+		return errors.Join(errors.New("AddtrackA"), err)
 	}
 
 	_, err = peerConnection.AddTrack(videoTrack)
 	if err != nil {
-		return err
+		return errors.Join(errors.New("AddtrackV"), err)
 	}
 
 	// Create an answer SDP
 	answerSDP, err := peerConnection.CreateAnswer(nil)
 	if err != nil {
-		return err
+		return errors.Join(errors.New("CreateAnswer"), err)
 	}
 
 	// Set the answer as the local description
 	err = peerConnection.SetLocalDescription(answerSDP)
 	if err != nil {
-		return err
+		return errors.Join(errors.New("setAnswer"), err)
 	}
 
 	// Convert the answer SDP to JSON
 	answerSDPBytes, err := json.Marshal(answerSDP)
 	if err != nil {
-		return err
+		return errors.Join(errors.New("json"), err)
 	}
 
 	// Send the answer SDP back to the client
 	return conn.WriteMessage(websocket.TextMessage, answerSDPBytes)
 }
 
-func handleAnswer(conn *websocket.Conn, answerSDP string) error {
-
-	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
-	if err != nil {
-		return err
-	}
-	defer peerConnection.Close()
+func handleAnswer(conn *websocket.Conn, answerSDP string, peerConnection *webrtc.PeerConnection) error {
 
 	answer := webrtc.SessionDescription{}
-	err = json.Unmarshal([]byte(answerSDP), &answer)
+	err := json.Unmarshal([]byte(answerSDP), &answer)
 	if err != nil {
-		return err
+		return errors.Join(errors.New("json"), err)
 	}
 
 	err = peerConnection.SetRemoteDescription(answer)
 	if err != nil {
-		return err
+		return errors.Join(errors.New("SetRemoteDsc"), err)
 	}
 
 	return nil
 }
 
-func handleICECandidate(conn *websocket.Conn, candidate string) error {
+func handleICECandidate(conn *websocket.Conn, candidate string, peerConnection *webrtc.PeerConnection) error {
 
-	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
-	if err != nil {
-		return err
-	}
-	defer peerConnection.Close()
-	// Parse the ICE candidate
-	iceCandidate := webrtc.ICECandidateInit{}
-	err = json.Unmarshal([]byte(candidate), &iceCandidate)
-	if err != nil {
-		return err
+	iceCandidate := webrtc.ICECandidateInit{
+		Candidate: candidate,
 	}
 
 	// Add the ICE candidate to the peer connection
-	err = peerConnection.AddICECandidate(iceCandidate)
+	err := peerConnection.AddICECandidate(iceCandidate)
 	if err != nil {
-		return err
+		return errors.Join(errors.New("AddICE"), err)
 	}
 
 	return nil
