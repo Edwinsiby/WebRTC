@@ -39,14 +39,12 @@ func (h *WebRTCHandler) handleWebSocket(c *gin.Context) {
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			// Allow all origins for WebSocket connections
 			return true
 		},
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		// Handle error
 		fmt.Println("error upgrade", err)
 		return
 	}
@@ -105,28 +103,12 @@ func handleOffer(conn *websocket.Conn, offerSDPstring string, peerConnection *we
 
 	StoredOffer = offerSDPstring
 
-	err := peerConnection.SetRemoteDescription(offerSDP)
+	err := peerConnection.SetLocalDescription(offerSDP)
 	if err != nil {
 		return errors.Join(errors.New("setRemote"), err)
 	}
 
-	answer, err := peerConnection.CreateAnswer(nil)
-	if err != nil {
-		return errors.Join(errors.New("createAnswer"), err)
-	}
-
-	err = peerConnection.SetLocalDescription(answer)
-	if err != nil {
-		return errors.Join(errors.New("setLocalAnswer"), err)
-	}
-	answerSDP1 = answer.SDP
-
-	answerSDPBytes, err := json.Marshal(answer)
-	if err != nil {
-		return errors.Join(errors.New("json"), err)
-	}
-
-	return conn.WriteMessage(websocket.TextMessage, answerSDPBytes)
+	return nil
 }
 
 func handleAnswer(conn *websocket.Conn, answerSDP string, peerConnection *webrtc.PeerConnection) error {
@@ -136,9 +118,19 @@ func handleAnswer(conn *websocket.Conn, answerSDP string, peerConnection *webrtc
 		SDP:  answerSDP1,
 	}
 
-	err := peerConnection.SetRemoteDescription(answer)
+	err := peerConnection.SetLocalDescription(answer)
 	if err != nil {
 		return errors.Join(errors.New("SetRemoteDsc"), err)
+	}
+
+	offer := webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  StoredOffer,
+	}
+
+	err = peerConnection.SetRemoteDescription(offer)
+	if err != nil {
+		return errors.Join(errors.New("setRemote"), err)
 	}
 
 	return nil
