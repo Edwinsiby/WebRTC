@@ -21,6 +21,8 @@ func GetStoredOffer() string {
 	return StoredOffer
 }
 
+var answerSDP1 string
+
 type WebRTCHandler struct{}
 
 func NewWebRTCHandler() *WebRTCHandler {
@@ -108,19 +110,30 @@ func handleOffer(conn *websocket.Conn, offerSDPstring string, peerConnection *we
 		return errors.Join(errors.New("setRemote"), err)
 	}
 
-	offerSDPBytes, err := json.Marshal(offerSDP)
+	answer, err := peerConnection.CreateAnswer(nil)
+	if err != nil {
+		return errors.Join(errors.New("createAnswer"), err)
+	}
+
+	err = peerConnection.SetLocalDescription(answer)
+	if err != nil {
+		return errors.Join(errors.New("setLocalAnswer"), err)
+	}
+	answerSDP1 = answer.SDP
+
+	answerSDPBytes, err := json.Marshal(answer)
 	if err != nil {
 		return errors.Join(errors.New("json"), err)
 	}
 
-	return conn.WriteMessage(websocket.TextMessage, offerSDPBytes)
+	return conn.WriteMessage(websocket.TextMessage, answerSDPBytes)
 }
 
 func handleAnswer(conn *websocket.Conn, answerSDP string, peerConnection *webrtc.PeerConnection) error {
 
 	answer := webrtc.SessionDescription{
 		Type: webrtc.SDPTypeAnswer,
-		SDP:  answerSDP,
+		SDP:  answerSDP1,
 	}
 
 	err := peerConnection.SetRemoteDescription(answer)
@@ -137,28 +150,10 @@ func handleICECandidate(conn *websocket.Conn, candidate string, peerConnection *
 		Candidate: candidate,
 	}
 
-	// Add the ICE candidate to the peer connection
 	err := peerConnection.AddICECandidate(iceCandidate)
 	if err != nil {
 		return errors.Join(errors.New("AddICE"), err)
 	}
 
 	return nil
-}
-
-func getUserMedia() (*webrtc.TrackLocalStaticSample, *webrtc.TrackLocalStaticSample, error) {
-	// Create a new audio track
-	audioTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio_track", "audio_stream")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Create a new video track
-	videoTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video_track", "video_stream")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Return the audio track and video track
-	return audioTrack, videoTrack, nil
 }

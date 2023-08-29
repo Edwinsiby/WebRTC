@@ -47,7 +47,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(new RTCSessionDescription(offer));
-            handleOffer(offer)
             ws.send(JSON.stringify({ type: 'offer', data: offer.sdp }));
         } catch (error) {
             console.error('Error starting conference:', error);
@@ -59,7 +58,17 @@ window.addEventListener('DOMContentLoaded', () => {
             localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             localVideo.srcObject = localStream;
     
-            peerConnection = new RTCPeerConnection();
+            if (!peerConnection) {
+                peerConnection = new RTCPeerConnection();
+                peerConnection.onicecandidate = event => {
+                    if (event.candidate) {
+                        ws.send(JSON.stringify({ type: 'candidate', data: event.candidate.candidate }));
+                    }
+                };
+                peerConnection.ontrack = event => {
+                    remoteVideo.srcObject = event.streams[0];
+                };
+            }
     
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             const response = await fetch('http://localhost:8080/get-offer'); 
