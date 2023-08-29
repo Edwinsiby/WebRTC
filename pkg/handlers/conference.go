@@ -15,6 +15,13 @@ var signalingMsg struct {
 	Type string `json:"type"`
 	Data string `json:"data"`
 }
+var StoredOffer string
+
+func GetStoredOffer() string {
+	return StoredOffer
+}
+
+var answerSDP1 string
 
 type WebRTCHandler struct{}
 
@@ -32,14 +39,12 @@ func (h *WebRTCHandler) handleWebSocket(c *gin.Context) {
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			// Allow all origins for WebSocket connections
 			return true
 		},
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		// Handle error
 		fmt.Println("error upgrade", err)
 		return
 	}
@@ -89,78 +94,43 @@ func (h *WebRTCHandler) handleWebSocket(c *gin.Context) {
 		}
 	}
 
-	// You can send signaling messages back to clients using conn.WriteMessage
 }
-
-func handleOffer(conn *websocket.Conn, offerSDP string, peerConnection *webrtc.PeerConnection) error {
-
-	// Parse the received offer SDP
-	offer := webrtc.SessionDescription{
+func handleOffer(conn *websocket.Conn, offerSDPstring string, peerConnection *webrtc.PeerConnection) error {
+	offerSDP := webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
-		SDP:  offerSDP,
+		SDP:  offerSDPstring,
 	}
 
-	// Set the offer as the remote description
-	err := peerConnection.SetRemoteDescription(offer)
+	StoredOffer = offerSDPstring
+
+	err := peerConnection.SetLocalDescription(offerSDP)
 	if err != nil {
 		return errors.Join(errors.New("setRemote"), err)
 	}
 
-	// Create audio and video tracks from user media
-	audioTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "pion")
-	if err != nil {
-		return errors.Join(errors.New("setTrackA"), err)
-	}
-
-	videoTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video", "pion")
-	if err != nil {
-		return errors.Join(errors.New("setTrackV"), err)
-	}
-
-	// Add tracks to the peer connection
-	_, err = peerConnection.AddTrack(audioTrack)
-	if err != nil {
-		return errors.Join(errors.New("AddtrackA"), err)
-	}
-
-	_, err = peerConnection.AddTrack(videoTrack)
-	if err != nil {
-		return errors.Join(errors.New("AddtrackV"), err)
-	}
-
-	// Create an answer SDP
-	answerSDP, err := peerConnection.CreateAnswer(nil)
-	if err != nil {
-		return errors.Join(errors.New("CreateAnswer"), err)
-	}
-
-	// Set the answer as the local description
-	err = peerConnection.SetLocalDescription(answerSDP)
-	if err != nil {
-		return errors.Join(errors.New("setAnswer"), err)
-	}
-
-	// Convert the answer SDP to JSON
-	answerSDPBytes, err := json.Marshal(answerSDP)
-	if err != nil {
-		return errors.Join(errors.New("json"), err)
-	}
-
-	// Send the answer SDP back to the client
-	return conn.WriteMessage(websocket.TextMessage, answerSDPBytes)
+	return nil
 }
 
 func handleAnswer(conn *websocket.Conn, answerSDP string, peerConnection *webrtc.PeerConnection) error {
 
-	answer := webrtc.SessionDescription{}
-	err := json.Unmarshal([]byte(answerSDP), &answer)
-	if err != nil {
-		return errors.Join(errors.New("json"), err)
+	answer := webrtc.SessionDescription{
+		Type: webrtc.SDPTypeAnswer,
+		SDP:  answerSDP1,
 	}
 
-	err = peerConnection.SetRemoteDescription(answer)
+	err := peerConnection.SetLocalDescription(answer)
 	if err != nil {
 		return errors.Join(errors.New("SetRemoteDsc"), err)
+	}
+
+	offer := webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  StoredOffer,
+	}
+
+	err = peerConnection.SetRemoteDescription(offer)
+	if err != nil {
+		return errors.Join(errors.New("setRemote"), err)
 	}
 
 	return nil
@@ -172,28 +142,10 @@ func handleICECandidate(conn *websocket.Conn, candidate string, peerConnection *
 		Candidate: candidate,
 	}
 
-	// Add the ICE candidate to the peer connection
 	err := peerConnection.AddICECandidate(iceCandidate)
 	if err != nil {
 		return errors.Join(errors.New("AddICE"), err)
 	}
 
 	return nil
-}
-
-func getUserMedia() (*webrtc.TrackLocalStaticSample, *webrtc.TrackLocalStaticSample, error) {
-	// Create a new audio track
-	audioTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio_track", "audio_stream")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Create a new video track
-	videoTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}, "video_track", "video_stream")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Return the audio track and video track
-	return audioTrack, videoTrack, nil
 }
