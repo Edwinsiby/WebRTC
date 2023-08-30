@@ -12,7 +12,7 @@
     <main id="lobby-container">
         <div id="form-container">
             <div id="form__container__header">
-                <p>👋 Create OR Join a Room</p>
+                <p>Create OR Join Private Conference</p>
             </div>
 
             <div id="form__content__wrapper">
@@ -34,7 +34,7 @@
     form.addEventListener('submit', (e) => {
         e.preventDefault()
         let inviteCode = e.target.invite_link.value
-        window.location = `index.html?room=${inviteCode}` 
+        window.location = `index?room=${inviteCode}` 
     })
 </script>
 
