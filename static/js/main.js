@@ -1,6 +1,5 @@
 let APP_ID = "69a825afcede4da68c9fdad51b124b64"
 
-
 let token = null;
 let uid = String(Math.floor(Math.random() * 10000))
 
@@ -27,7 +26,6 @@ const servers = {
     ]
 }
 
-
 let constraints = {
     video:{
         width:{min:640, ideal:1920, max:1920},
@@ -52,7 +50,6 @@ let init = async () => {
     document.getElementById('user-1').srcObject = localStream
 }
  
-
 let handleUserLeft = (MemberId) => {
     document.getElementById('user-2').style.display = 'none'
     document.getElementById('user-1').classList.remove('smallFrame')
@@ -76,14 +73,12 @@ let handleMessageFromPeer = async (message, MemberId) => {
         }
     }
 
-
 }
 
 let handleUserJoined = async (MemberId) => {
     console.log('A new user joined the channel:', MemberId)
     createOffer(MemberId)
 }
-
 
 let createPeerConnection = async (MemberId) => {
     peerConnection = new RTCPeerConnection(servers)
@@ -126,7 +121,6 @@ let createOffer = async (MemberId) => {
     client.sendMessageToPeer({text:JSON.stringify({'type':'offer', 'offer':offer})}, MemberId)
 }
 
-
 let createAnswer = async (MemberId, offer) => {
     await createPeerConnection(MemberId)
 
@@ -138,13 +132,11 @@ let createAnswer = async (MemberId, offer) => {
     client.sendMessageToPeer({text:JSON.stringify({'type':'answer', 'answer':answer})}, MemberId)
 }
 
-
 let addAnswer = async (answer) => {
     if(!peerConnection.currentRemoteDescription){
         peerConnection.setRemoteDescription(answer)
     }
 }
-
 
 let leaveChannel = async () => {
     await channel.leave()

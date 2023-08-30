@@ -26,7 +26,7 @@ func main() {
 		c.HTML(http.StatusOK, "lobby.html", nil)
 	})
 
-	r.GET("/index.html", func(c *gin.Context) {
+	r.GET("/index", func(c *gin.Context) {
 		room := c.DefaultQuery("room", "")
 		c.HTML(http.StatusOK, "index.html", gin.H{"room": room})
 	})
